@@ -18,6 +18,7 @@
 //******************************* Global Types ******************************** 
 #define TRUE 1
 #define FALSE 0
+#define ERROR -1
 
 typedef unsigned char uint8;
 typedef unsigned short uint16;

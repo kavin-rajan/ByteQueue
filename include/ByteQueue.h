@@ -16,22 +16,29 @@
 //******************************* Include Files ******************************* 
 #include <stdio.h>
 #include <stdbool.h>
-#include <pthread.h>
 #include <stdlib.h>
 #include "Types.h"
+#include "pThreadHelper.h"
+
 //******************************* Global Types ******************************** 
+// Enum for type of the ByteQueue
+typedef enum __eQueueType
+{
+    Bq_Overwrite,  // Overwrite if Queue is Full
+    Bq_Wait        // Wait if Queue is Full
+}_eQueueType;
 
-#define BQDEFAULT_SIZE 10
-#define ERROR -1
-
+// This structure implements a FIFO ByteQueue with Head/Tail counters.
+// Type of ByteQueue is specified by eByType
+// Access to this structure must be synchronized via sLock Mutex 
 typedef struct __sByteQueue
 {
-    uint8* pucBuffer;        // Address where data stored
-    uint16 unCapacity;       // Maximum size of the buffer
-    uint16 unHead;           // Head index of the queue
-    uint16 unTail;           // Tail index of the queue
-    uint16 unSize;           // current No of elements in queue
-    pthread_mutex_t lock;    // Mutex lock
+    uint8 *pucBuffer;        // Address where data stored
+    uint32 ulCapacity;       // Maximum size of the buffer
+    volatile uint32 ulHead;           // Head index of the queue
+    volatile uint32 ulTail;           // Tail index of the queue
+    _eQueueType eBqType;     // Type of Byte queue 
+    pthread_mutex_t sLock;   // Mutex lock
 }_sByteQueue;
 
 //***************************** Global Constants ****************************** 
@@ -39,14 +46,17 @@ typedef struct __sByteQueue
 //***************************** Global Variables ****************************** 
  
 //**************************** Forward Declarations *************************** 
-BOOL BqInitByteQueue(_sByteQueue* sByteQueue, uint8* pucBuffer, uint8 unSize);
-BOOL BqPush(_sByteQueue* sByteQueue, uint8 ucData);
-int16 BqWrite(_sByteQueue* sByteQueue, uint8* pucBuffer, uint8 unSize);
-BOOL BqPop(_sByteQueue* sByteQueue, uint8* ucDataRead);
-int16 BqRead(_sByteQueue* sByteQueue,  uint8* pucBuffer, uint8 unSize);
-int32 BqGetFreeSpace(_sByteQueue* sByteQueue);
-int32 BqGetFilledSpace(_sByteQueue* sByteQueue);
-BOOL BqFlush(_sByteQueue* sByteQueue);
+BOOL BqInitByteQueue(_sByteQueue *sByteQueue, 
+                    uint8 *pucBuffer, 
+                    uint32 ulSize, 
+                    _eQueueType eBqType);
+BOOL BqPush(_sByteQueue *sByteQueue, uint8 ucData);
+int16 BqWrite(_sByteQueue *sByteQueue, uint8 *pucBuffer, uint32 ulSize);
+BOOL BqPop(_sByteQueue *sByteQueue, uint8 *ucDataRead);
+int16 BqRead(_sByteQueue *sByteQueue,  uint8 *pucBuffer, uint32 ulSize);
+int32 BqGetFreeSpace(_sByteQueue *sByteQueue);
+int32 BqGetFilledSpace(_sByteQueue *sByteQueue);
+BOOL BqFlush(_sByteQueue *sByteQueue);
 
 #endif // _BYTEQUEUE_H_ 
 // EOF  
