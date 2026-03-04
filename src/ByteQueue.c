@@ -39,6 +39,7 @@ BOOL BqInitByteQueue(_sByteQueue *psByteQueue,
                     uint32 ulSize, 
                     _eQueueType eBqType)
 {
+    BOOL bReturnValue = FALSE;
     do
     {
         // Pointer NULL check
@@ -62,10 +63,10 @@ BOOL BqInitByteQueue(_sByteQueue *psByteQueue,
             printf("Mutex init failed!\n");
             break;
         }
-        return TRUE;
+        bReturnValue = TRUE;
     }
     while (0);
-    return FALSE;
+    return bReturnValue;
 }
 
 //******************************.FUNCTION_HEADER.****************************** 
@@ -79,56 +80,62 @@ BOOL BqInitByteQueue(_sByteQueue *psByteQueue,
 //***************************************************************************** 
 BOOL BqPush(_sByteQueue *psByteQueue, uint8 ucData)
 {
-    // Pointer NULL check
-    if (NULL == psByteQueue)
+    BOOL bReturnValue = FALSE;
+    do
     {
-        printf("pointer is NULL!\n");
-        return FALSE;
-    }
-
-    BqMutexLock(&psByteQueue->sLock); // lock mutex
-
-    // ByteQueue Type Handling during Push
-    if (Bq_Wait == psByteQueue->eBqType)
-    {
-        // Wait until an empty space in queue
-        do
+        // Pointer NULL check
+        if (NULL == psByteQueue)
         {
-            // if size and capacity are equal queue is full
-            if (BqGetFreeSpace(psByteQueue) <= 1)
-            {
-                // if queue is full yield
-                BqMutexUnlock(&psByteQueue->sLock); // Unlock
-                sched_yield();
-                BqMutexLock(&psByteQueue->sLock); // lock
-            }
-            else
-            {
-                break;
-            }
+            printf("pointer is NULL!\n");
+            break;
         }
-        while (1);
-    }
-    else if (Bq_Overwrite == psByteQueue->eBqType)
-    {
-        // Skip Wait for Bq_Overwrite type ByteQueue 
-    }
-    else
-    {
-        printf("Invalid ByteQueue Type!!\n");
+
+        BqMutexLock(&psByteQueue->sLock); // lock mutex
+
+        // ByteQueue Type Handling during Push
+        if (Bq_Wait == psByteQueue->eBqType)
+        {
+            // Wait until an empty space in queue
+            do
+            {
+                // if size and capacity are equal queue is full
+                if (BqGetFreeSpace(psByteQueue) <= 1)
+                {
+                    // if queue is full yield
+                    BqMutexUnlock(&psByteQueue->sLock); // Unlock
+                    sched_yield();
+                    BqMutexLock(&psByteQueue->sLock); // lock
+                }
+                else
+                {
+                    break;
+                }
+            }
+            while (1);
+        }
+        else if (Bq_Overwrite == psByteQueue->eBqType)
+        {
+            // Skip Wait for Bq_Overwrite type ByteQueue 
+        }
+        else
+        {
+            printf("Invalid ByteQueue Type!!\n");
+            BqMutexUnlock(&psByteQueue->sLock); // Unlock
+            break;
+        }
+
+        // Push the data where tail is pointed
+        psByteQueue->pucBuffer[psByteQueue->ulTail] = ucData;
+
+        // Increase the index of tail 
+        // reset tail to zero if it is greater than capacity 
+        psByteQueue->ulTail = (psByteQueue->ulTail + 1) % psByteQueue->ulCapacity;
+
         BqMutexUnlock(&psByteQueue->sLock); // Unlock
-        return FALSE;
-    }
-
-    // Push the data where tail is pointed
-    psByteQueue->pucBuffer[psByteQueue->ulTail] = ucData;
-
-    // Increase the index of tail 
-    // reset tail to zero if it is greater than capacity 
-    psByteQueue->ulTail = (psByteQueue->ulTail + 1) % psByteQueue->ulCapacity;
-
-    BqMutexUnlock(&psByteQueue->sLock); // Unlock
-    return TRUE;
+        bReturnValue = TRUE;
+    } 
+    while (0);
+    return bReturnValue;
 }
 //******************************.FUNCTION_HEADER.****************************** 
 //Purpose : Writes the given input array of data to Queue
@@ -144,7 +151,7 @@ int16 BqWrite(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
 {
     // Local variables
     uint8 i = 0;
-    int16 nNoOfDataWritten = 0;
+    int16 nNoOfDataWritten = ERROR;
 
     do
     {
@@ -161,6 +168,7 @@ int16 BqWrite(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
             break;
         }
 
+        nNoOfDataWritten = 0;
         // iterate through the array of data
         for (i=0; i < ulSize; i++)
         {
@@ -174,11 +182,9 @@ int16 BqWrite(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
                 printf("Error occured during Push!!\n");
             }
         }
-
-        return nNoOfDataWritten;
     } 
     while (0);
-    return ERROR;
+    return nNoOfDataWritten;
 }
 
 //******************************.FUNCTION_HEADER.******************************
@@ -192,43 +198,49 @@ int16 BqWrite(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
 //*****************************************************************************
 BOOL BqPop(_sByteQueue *psByteQueue, uint8 *ucDataRead)
 {
-    // Pointer NULL check
-    if ((NULL == psByteQueue) || (NULL == ucDataRead))
-    {
-        printf("pointer is NULL!\n");
-        return FALSE;
-    }
+    BOOL bReturnValue = FALSE;
 
-    BqMutexLock(&psByteQueue->sLock); // Wait and lock
-
-    // Wait if the ByteQueue is Empty
     do
     {
-        // check if queue is empty
-        if (0 == BqGetFilledSpace(psByteQueue))
+        // Pointer NULL check
+        if ((NULL == psByteQueue) || (NULL == ucDataRead))
         {
-            // if queue is Empty yield
-            BqMutexUnlock(&psByteQueue->sLock); // Unlock
-            sched_yield();
-            BqMutexLock(&psByteQueue->sLock); // lock
-        }
-        else
-        {
+            printf("pointer is NULL!\n");
             break;
         }
-    }
-    while (1);
 
-    // pop the data where head is pointed
-    *ucDataRead = psByteQueue->pucBuffer[psByteQueue->ulHead];
+        BqMutexLock(&psByteQueue->sLock); // Wait and lock
 
-    // Increase the index of head 
-    // reset tail to head if it is greater than capacity 
-    psByteQueue->ulHead = (psByteQueue->ulHead + 1) % psByteQueue->ulCapacity;
-        
-    BqMutexUnlock(&psByteQueue->sLock); // Unlock
+        // Wait if the ByteQueue is Empty
+        do
+        {
+            // check if queue is empty
+            if (0 == BqGetFilledSpace(psByteQueue))
+            {
+                // if queue is Empty yield
+                BqMutexUnlock(&psByteQueue->sLock); // Unlock
+                sched_yield();
+                BqMutexLock(&psByteQueue->sLock); // lock
+            }
+            else
+            {
+                break;
+            }
+        }
+        while (1);
 
-    return TRUE;
+        // pop the data where head is pointed
+        *ucDataRead = psByteQueue->pucBuffer[psByteQueue->ulHead];
+
+        // Increase the index of head 
+        // reset tail to head if it is greater than capacity 
+        psByteQueue->ulHead = (psByteQueue->ulHead + 1) % psByteQueue->ulCapacity;
+            
+        BqMutexUnlock(&psByteQueue->sLock); // Unlock
+        bReturnValue = TRUE;
+    } 
+    while (0);
+    return bReturnValue;
 }
 
 //******************************.FUNCTION_HEADER.******************************
@@ -245,7 +257,7 @@ int16 BqRead(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
 {
     // Local variables
     uint8 i = 0;
-    int16 nNoOfDataRead = 0;
+    int16 nNoOfDataRead = ERROR;
 
     do
     {
@@ -261,6 +273,7 @@ int16 BqRead(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
             printf("Mininmum size should be atleast 1 !!\n");
             break;
         }
+        nNoOfDataRead = 0;
 
         // iterate for given ulSize
         for (i=0; i < ulSize; i++)
@@ -275,10 +288,9 @@ int16 BqRead(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
                 printf("Error occured during POP!!\n");
             }
         }
-        return nNoOfDataRead;
     } 
     while (0);
-    return ERROR;
+    return nNoOfDataRead;
 }
 
 //******************************.FUNCTION_HEADER.******************************
@@ -291,15 +303,24 @@ int16 BqRead(_sByteQueue *psByteQueue, uint8 *pucBuffer, uint32 ulSize)
 //*****************************************************************************
 int32 BqGetFreeSpace(_sByteQueue *psByteQueue)
 {
-    // Pointer NULL check
-    if (NULL == psByteQueue)
-    {
-        printf("pointer is NULL!\n");
-        return ERROR;
-    }
+    int32 nReturnValue = ERROR;
 
-    return (((int32)psByteQueue->ulHead - (int32)psByteQueue->ulTail - 1 + 
-            (int32)psByteQueue->ulCapacity) % (int32)psByteQueue->ulCapacity);
+    do
+    {
+        // Pointer NULL check
+        if (NULL == psByteQueue)
+        {
+            printf("pointer is NULL!\n");
+            break;
+        }
+
+        nReturnValue = (((int32)psByteQueue->ulHead - 
+                        (int32)psByteQueue->ulTail - 1 + 
+                        (int32)psByteQueue->ulCapacity) % 
+                        (int32)psByteQueue->ulCapacity);
+    } 
+    while (0);
+    return nReturnValue;
 }
 
 //******************************.FUNCTION_HEADER.******************************
@@ -312,15 +333,24 @@ int32 BqGetFreeSpace(_sByteQueue *psByteQueue)
 //*****************************************************************************
 int32 BqGetFilledSpace(_sByteQueue *psByteQueue)
 {
-    // Pointer NULL check
-    if (NULL == psByteQueue)
-    {
-        printf("pointer is NULL!\n");
-        return ERROR;
-    }
+    int32 nReturnValue = ERROR;
 
-    return (((int32)psByteQueue->ulTail - (int32)psByteQueue->ulHead + 
-            (int32)psByteQueue->ulCapacity) % (int32)psByteQueue->ulCapacity); 
+    do
+    {
+        // Pointer NULL check
+        if (NULL == psByteQueue)
+        {
+            printf("pointer is NULL!\n");
+            break;
+        }
+
+        nReturnValue = (((int32)psByteQueue->ulTail - 
+                        (int32)psByteQueue->ulHead + 
+                        (int32)psByteQueue->ulCapacity) % 
+                        (int32)psByteQueue->ulCapacity); 
+    }
+    while (0);
+    return nReturnValue;
 }
 //******************************.FUNCTION_HEADER.******************************
 //Purpose : Removes the memory allocated and clears the byte queue
@@ -332,16 +362,23 @@ int32 BqGetFilledSpace(_sByteQueue *psByteQueue)
 //*****************************************************************************
 BOOL BqFlush(_sByteQueue *psByteQueue)
 {
-    // Pointer NULL check
-    if (NULL == psByteQueue)
+    BOOL bReturnValue = FALSE;
+    
+    do
     {
-        printf("pointer is NULL!\n");
-        return FALSE;
-    }
-    BqMutexLock(&psByteQueue->sLock); // Wait and lock
-    psByteQueue->ulHead = 0;
-    psByteQueue->ulTail = 0; 
-    BqMutexUnlock(&psByteQueue->sLock); // Unlock
-    return TRUE;
+        // Pointer NULL check
+        if (NULL == psByteQueue)
+        {
+            printf("pointer is NULL!\n");
+            break;
+        }
+        BqMutexLock(&psByteQueue->sLock); // Wait and lock
+        psByteQueue->ulHead = 0;
+        psByteQueue->ulTail = 0; 
+        BqMutexUnlock(&psByteQueue->sLock); // Unlock
+        bReturnValue = TRUE;
+    } 
+    while (0);
+    return bReturnValue;
 }
 // EOF 

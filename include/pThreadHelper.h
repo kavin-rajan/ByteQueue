@@ -26,7 +26,7 @@
 
 //******************************.FUNCTION_HEADER.****************************** 
 //Purpose : Wrapper for Mutex lock, display error and abort in case of an error
-//Inputs  : mutex : Address of Mutex lock
+//Inputs  : sMutex : Address of Mutex lock
 //Outputs : 
 //Return  : None
 //Notes   : 
@@ -44,7 +44,7 @@ static inline void BqMutexLock(pthread_mutex_t *sMutex)
 
 //******************************.FUNCTION_HEADER.****************************** 
 //Purpose : Wrapper for mutex Unlock, display error and abort
-//Inputs  : mutex : Address of Mutex lock
+//Inputs  : sMutex : Address of Mutex lock
 //Outputs : 
 //Return  : None
 //Notes   :
